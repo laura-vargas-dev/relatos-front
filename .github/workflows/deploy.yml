@@ -27,14 +27,14 @@ jobs:
       - name: Compress build folder
         run: tar -czf build.tar.gz build/
 
-      - name: Copy build to EC2
+      - name: Upload tar.gz to EC2
         uses: appleboy/scp-action@v0.1.5
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_KEY }}
-          source: "build/*"
-          target: ${{ secrets.FRONT_PATH }}
+          source: "build.tar.gz"
+          target: "/home/ec2-user/"
 
       - name: Deploy on EC2
         uses: appleboy/ssh-action@v1.0.3
@@ -43,7 +43,23 @@ jobs:
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            sudo rm -rf ${{ secrets.FRONT_PATH }}/*
-            sudo tar -xzf ~/build.tar.gz -C ${{ secrets.FRONT_PATH }}
+            FRONT="/usr/share/nginx/html"
+
+            # Limpia el contenido del front
+            sudo rm -rf $FRONT/*
+
+            # Directorio temporal
+            mkdir -p /home/ec2-user/deploy_tmp
+
+            # Descomprime el build en /deploy_tmp
+            tar -xzf /home/ec2-user/build.tar.gz -C /home/ec2-user/deploy_tmp
+
+            # Copia solo el contenido de build/ a /usr/share/nginx/html
+            sudo cp -r /home/ec2-user/deploy_tmp/build/* $FRONT
+
+            # Limpieza
+            rm -rf /home/ec2-user/deploy_tmp
+            rm /home/ec2-user/build.tar.gz
+
+            # Reinicia nginx
             sudo systemctl restart nginx
-            rm ~/build.tar.gz
